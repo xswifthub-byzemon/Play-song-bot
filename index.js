@@ -1,6 +1,6 @@
 // ===============================
-// 🎵 Pai Music Bot PRO V4 By Pai 💖
-// For ซีม่อน (Stable Version)
+// 🎵 Pai Music Bot PRO V5 By Pai 💖
+// For ซีม่อน (YouTube Fixed)
 // ===============================
 
 const {
@@ -26,7 +26,7 @@ const {
   NoSubscriberBehavior
 } = require("@discordjs/voice");
 
-const ytdl = require("ytdl-core");
+const ytdl = require("@distube/ytdl-core");
 require("dotenv").config();
 
 // ===============================
@@ -62,7 +62,7 @@ const player = createAudioPlayer({
 
 client.once("ready", async () => {
 
-  console.log("🎧 Pai Music Bot PRO V4 Online!");
+  console.log("🎧 Pai Music Bot PRO V5 Online!");
 
   const cmd = new SlashCommandBuilder()
     .setName("musicpanel")
@@ -270,7 +270,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!ytdl.validateURL(url)) {
 
         return interaction.reply({
-          content: "❌ ต้องเป็นลิงก์ YouTube เท่านั้นนะคะ 💔",
+          content: "❌ ลิงก์ไม่ถูกต้องนะคะ 💔",
           flags: 64
         });
       }
