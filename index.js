@@ -8,7 +8,6 @@ const {
 	Client,
 	GatewayIntentBits,
 	SlashCommandBuilder,
-	PermissionFlagsBits,
 	EmbedBuilder,
 	ActionRowBuilder,
 	StringSelectMenuBuilder,
@@ -146,36 +145,6 @@ client.on("interactionCreate", async (i) => {
 		});
 	}
 
-	// ================= serverinfo =================
-
-	if (i.commandName === "serverinfo") {
-
-		await i.guild.members.fetch();
-
-		const m = i.guild.members.cache;
-
-		let list = "";
-
-		m.forEach(x => {
-			list += `👤 ${x.user.tag}\n📅 ${x.joinedAt.toLocaleString("th-TH")}\n\n`;
-		});
-
-		const embed = new EmbedBuilder()
-			.setColor(0xff9ad5)
-			.setTitle("📊 ข้อมูลเซิฟเวอร์")
-			.setDescription(
-				`👥 สมาชิก: ${m.filter(x => !x.user.bot).size}\n` +
-				`🤖 บอท: ${m.filter(x => x.user.bot).size}\n\n` +
-				list
-			)
-			.setFooter({ text: "Angel Bot 24/7 🪽" })
-			.setTimestamp();
-
-		await i.reply({ embeds: [embed], ephemeral: true });
-
-		setTimeout(() => i.deleteReply().catch(() => {}), 10000);
-	}
-
 	// ================= autogreet =================
 
 	if (i.commandName === "autogreet") {
@@ -203,36 +172,7 @@ client.on("interactionCreate", async (i) => {
 	}
 });
 
-// ================= VC SELECT =================
-
-client.on("interactionCreate", async (i) => {
-
-	if (!i.isStringSelectMenu()) return;
-	if (i.customId !== "vc_select") return;
-
-	const ch = i.guild.channels.cache.get(i.values[0]);
-
-	const old = getVoiceConnection(i.guild.id);
-	if (old) old.destroy();
-
-	const conn = joinVoiceChannel({
-		channelId: ch.id,
-		guildId: ch.guild.id,
-		adapterCreator: ch.guild.voiceAdapterCreator,
-		selfDeaf: true,
-		selfMute: true,
-		group: "angel24"
-	});
-
-	await entersState(conn, VoiceConnectionStatus.Ready, 30000);
-
-	await i.update({
-		content: `✅ เข้า ${ch.name} แล้วค้าบ 🪽`,
-		components: []
-	});
-});
-
-// ================= EMBED SENDER =================
+// ================= LOG SEND =================
 
 function sendLog(channelId, embed) {
 
@@ -246,13 +186,32 @@ function sendLog(channelId, embed) {
 
 // ================= CHANNEL CREATE =================
 
-client.on("channelCreate", ch => {
+client.on("channelCreate", async (ch) => {
+
+	let executor = "ไม่ทราบผู้ใช้";
+
+	try {
+
+		const logs = await ch.guild.fetchAuditLogs({
+			type: 10, // CHANNEL_CREATE
+			limit: 1
+		});
+
+		const entry = logs.entries.first();
+
+		if (entry?.executor) {
+			executor = `<@${entry.executor.id}>`;
+		}
+
+	} catch (e) {
+		console.log("Create Log Error:", e);
+	}
 
 	const embed = new EmbedBuilder()
 		.setColor(0x55efc4)
 		.setTitle("📁 สร้างห้องใหม่")
 		.setDescription(
-			`👤 <@${ch.creatorId || "unknown"}>\n` +
+			`👤 ${executor}\n` +
 			`📂 ${ch.parent ? ch.parent.name : "ไม่มีหมวด"}\n` +
 			`#️⃣ <#${ch.id}>\n\n` +
 			`📅 ${new Date().toLocaleString("th-TH")}`
@@ -264,12 +223,32 @@ client.on("channelCreate", ch => {
 
 // ================= CHANNEL DELETE =================
 
-client.on("channelDelete", ch => {
+client.on("channelDelete", async (ch) => {
+
+	let executor = "ไม่ทราบผู้ใช้";
+
+	try {
+
+		const logs = await ch.guild.fetchAuditLogs({
+			type: 12, // CHANNEL_DELETE
+			limit: 1
+		});
+
+		const entry = logs.entries.first();
+
+		if (entry?.executor) {
+			executor = `<@${entry.executor.id}>`;
+		}
+
+	} catch (e) {
+		console.log("Delete Log Error:", e);
+	}
 
 	const embed = new EmbedBuilder()
 		.setColor(0xff7675)
 		.setTitle("🗑️ ลบห้อง")
 		.setDescription(
+			`👤 ${executor}\n` +
 			`📂 ${ch.parent ? ch.parent.name : "ไม่มีหมวด"}\n` +
 			`#️⃣ ${ch.name}\n\n` +
 			`📅 ${new Date().toLocaleString("th-TH")}`
@@ -279,13 +258,12 @@ client.on("channelDelete", ch => {
 	sendLog(data.deleteLog, embed);
 });
 
-// ================= VOICE UPDATE =================
+// ================= VOICE =================
 
 client.on("voiceStateUpdate", (oldS, newS) => {
 
 	const user = newS.member || oldS.member;
 
-	// JOIN
 	if (!oldS.channel && newS.channel) {
 
 		const embed = new EmbedBuilder()
@@ -300,7 +278,6 @@ client.on("voiceStateUpdate", (oldS, newS) => {
 		sendLog(data.vcJoin, embed);
 	}
 
-	// LEAVE
 	if (oldS.channel && !newS.channel) {
 
 		const embed = new EmbedBuilder()
