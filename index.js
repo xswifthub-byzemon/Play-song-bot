@@ -25,6 +25,7 @@ const cron = require("node-cron");
 // ================= CONFIG =================
 
 const TOKEN = process.env.TOKEN;
+const OWNER_ID = process.env.OWNER_ID;
 
 // ================= CLIENT =================
 
@@ -47,25 +48,24 @@ let autoGreetChannel = null;
 client.once("ready", async () => {
 	console.log(`✅ Logged in as ${client.user.tag}`);
 
-	// Register Commands
 	const commands = [
 
 		// /stayvc
 		new SlashCommandBuilder()
 			.setName("stayvc")
-			.setDescription("ให้บอทเข้า VC ค้าง 24/7 (Owner Only)")
+			.setDescription("ให้บอทเข้า VC ค้าง 24/7 (เฉพาะซีม่อน)")
 			.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
 		// /serverinfo
 		new SlashCommandBuilder()
 			.setName("serverinfo")
-			.setDescription("ดูข้อมูลเซิฟเวอร์ (Owner Only)")
+			.setDescription("ดูข้อมูลเซิฟเวอร์ (เฉพาะซีม่อน)")
 			.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
 		// /autogreet
 		new SlashCommandBuilder()
 			.setName("autogreet")
-			.setDescription("ตั้งค่าระบบทักทายอัตโนมัติ")
+			.setDescription("ตั้งค่าระบบทักทายอัตโนมัติ (เฉพาะซีม่อน)")
 			.addChannelOption(opt =>
 				opt.setName("channel")
 					.setDescription("เลือกช่องส่งข้อความ")
@@ -80,18 +80,22 @@ client.once("ready", async () => {
 	console.log("✅ Slash Commands Registered");
 });
 
+// ================= OWNER CHECK =================
+
+function isOwner(interaction) {
+	return interaction.user.id === OWNER_ID;
+}
+
 // ================= INTERACTION =================
 
 client.on("interactionCreate", async (interaction) => {
 
 	if (!interaction.isChatInputCommand()) return;
 
-	const ownerId = interaction.guild.ownerId;
-
-	// Owner Check
-	if (interaction.user.id !== ownerId) {
+	// เช็กเจ้าของ
+	if (!isOwner(interaction)) {
 		return interaction.reply({
-			content: "❌ คำสั่งนี้ใช้ได้เฉพาะเจ้าของเซิฟเท่านั้นนะค้าบ 💢",
+			content: "❌ คำสั่งนี้ใช้ได้เฉพาะซีม่อนเท่านั้นนะค้าบ 💢",
 			ephemeral: true
 		});
 	}
@@ -147,7 +151,7 @@ client.on("interactionCreate", async (interaction) => {
 			.setColor(0xffc0cb)
 			.setTitle("📊 ข้อมูลเซิฟเวอร์")
 			.setDescription(
-				`👥 สมาชิก: ${humans.size}\n` +
+				`👥 สมาชิกจริง: ${humans.size}\n` +
 				`🤖 บอท: ${bots.size}\n\n` +
 				`📌 รายชื่อทั้งหมด:\n${list}`
 			)
@@ -169,7 +173,7 @@ client.on("interactionCreate", async (interaction) => {
 
 		autoGreetChannel = channel.id;
 
-		await interaction.reply(`✅ ตั้งค่าทักทายอัตโนมัติที่ <#${channel.id}> แล้วค้าบ 💖`);
+		await interaction.reply(`✅ เปิดระบบทักทายที่ <#${channel.id}> แล้วค้าบ 💖`);
 	}
 });
 
@@ -180,6 +184,14 @@ client.on("interactionCreate", async (interaction) => {
 	if (!interaction.isStringSelectMenu()) return;
 
 	if (interaction.customId !== "vc_select") return;
+
+	// เช็กเจ้าของ
+	if (interaction.user.id !== OWNER_ID) {
+		return interaction.reply({
+			content: "❌ เฉพาะซีม่อนเท่านั้นนะค้าบ 💢",
+			ephemeral: true
+		});
+	}
 
 	const channelId = interaction.values[0];
 
@@ -204,7 +216,9 @@ client.on("interactionCreate", async (interaction) => {
 
 		// Auto Reconnect
 		stayConnection.on(VoiceConnectionStatus.Disconnected, async () => {
+
 			try {
+
 				stayConnection.destroy();
 
 				stayConnection = joinVoiceChannel({
@@ -219,7 +233,7 @@ client.on("interactionCreate", async (interaction) => {
 		});
 
 		await interaction.update({
-			content: `✅ บอทเข้า **${channel.name}** แล้วค้าบ 🪽`,
+			content: `✅ เข้า **${channel.name}** แล้วค้าบ 🪽`,
 			components: []
 		});
 
@@ -260,7 +274,7 @@ function sendEmbed(title, msg) {
 // 06:00
 cron.schedule("0 6 * * *", () => {
 	sendEmbed("🌤️ สวัสดีตอนเช้า",
-		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n🌞 ตื่นได้แล้วนะ\n🛁 อาบน้ำ กินข้าว\n📚 ไปเรียน ไปทำงาน\n✨ สู้ๆนะค้าบ 💕"
+		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n🌞 ตื่นได้แล้ว\n🛁 อาบน้ำ กินข้าว\n📚 ไปเรียน ไปทำงาน\n✨ สู้ๆนะค้าบ 💕"
 	);
 });
 
@@ -274,7 +288,7 @@ cron.schedule("0 12 * * *", () => {
 // 17:00
 cron.schedule("0 17 * * *", () => {
 	sendEmbed("🌇 ตอนเย็นแล้ว",
-		"😴 เหนื่อยกันมาทั้งวัน\n🍜 ไปหาอะไรกิน\n💖 เก่งมากทุกคน"
+		"😴 เหนื่อยมาทั้งวัน\n🍜 ไปหาอะไรกิน\n💖 เก่งมากทุกคน"
 	);
 });
 
@@ -288,7 +302,7 @@ cron.schedule("0 22 * * *", () => {
 // 00:00
 cron.schedule("0 0 * * *", () => {
 	sendEmbed("🎊 วันใหม่แล้ว",
-		"🌈 เริ่มต้นใหม่อีกวัน\n🚀 ขอให้ปังๆ\n🪽 Angel อยู่ข้างๆเสมอ"
+		"🌈 เริ่มใหม่อีกวัน\n🚀 ขอให้ปังๆ\n🪽 Angel อยู่ข้างๆเสมอ"
 	);
 });
 
