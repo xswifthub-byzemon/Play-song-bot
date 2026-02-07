@@ -1,7 +1,6 @@
 // ===============================
-// 🎵 Pai Music Bot By Pai 💖
+// 🎵 Pai Music Bot PRO By Pai 💖
 // For ซีม่อน
-// Node.js Discord Music Bot
 // ===============================
 
 const {
@@ -15,7 +14,8 @@ const {
   TextInputBuilder,
   TextInputStyle,
   Events,
-  InteractionType
+  InteractionType,
+  EmbedBuilder
 } = require("discord.js");
 
 const {
@@ -27,6 +27,7 @@ const {
 } = require("@discordjs/voice");
 
 const ytdl = require("ytdl-core");
+const yts = require("yt-search");
 
 require("dotenv").config();
 
@@ -34,8 +35,7 @@ require("dotenv").config();
 // CONFIG
 // ===============================
 
-// ใส่ Discord ID ซีม่อนตรงนี้
-const OWNER_ID = "ใส่DiscordIDซีม่อนตรงนี้";
+const OWNER_ID = process.env.OWNER_ID;
 
 // ===============================
 
@@ -49,7 +49,7 @@ const client = new Client({
 const queue = new Map();
 
 // ===============================
-// AUDIO PLAYER
+// PLAYER
 // ===============================
 
 const player = createAudioPlayer({
@@ -63,7 +63,8 @@ const player = createAudioPlayer({
 // ===============================
 
 client.once("ready", async () => {
-  console.log("🎧 Pai Music Bot Online!");
+
+  console.log("🎧 Pai Music Bot PRO Online!");
 
   const cmd = new SlashCommandBuilder()
     .setName("musicpanel")
@@ -73,10 +74,55 @@ client.once("ready", async () => {
 });
 
 // ===============================
-// PLAY FUNCTION
+// TIME FORMAT
+// ===============================
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// ===============================
+// PANEL EMBED
+// ===============================
+
+function createPanel(guildId) {
+
+  const serverQueue = queue.get(guildId);
+
+  if (!serverQueue || !serverQueue.songs[0]) {
+
+    return new EmbedBuilder()
+      .setColor("#ffb6ff")
+      .setTitle("🎧 Music Panel")
+      .setDescription("❌ ตอนนี้ยังไม่มีเพลงในคิวนะคะ 💔");
+  }
+
+  const song = serverQueue.songs[0];
+
+  return new EmbedBuilder()
+    .setColor("#ff66cc")
+    .setTitle("🎵 Music Panel By Pai 💖")
+    .setThumbnail(song.thumbnail)
+    .setDescription(
+`🎶 **กำลังเล่นอยู่**
+> ${song.title}
+
+⏱️ เวลา: ${formatTime(song.duration)}
+
+📃 คิวทั้งหมด: ${serverQueue.songs.length} เพลง
+
+💗 สนุกกับเสียงเพลงนะคะซีม่อน 😘`
+    );
+}
+
+// ===============================
+// PLAY
 // ===============================
 
 async function playSong(guild, song) {
+
   const serverQueue = queue.get(guild.id);
 
   if (!song) {
@@ -96,6 +142,7 @@ async function playSong(guild, song) {
   serverQueue.connection.subscribe(player);
 
   player.once(AudioPlayerStatus.Idle, () => {
+
     serverQueue.songs.shift();
     playSong(guild, serverQueue.songs[0]);
   });
@@ -107,12 +154,16 @@ async function playSong(guild, song) {
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
-  // Slash Command
+  // =====================
+  // SLASH
+  // =====================
+
   if (interaction.isChatInputCommand()) {
 
     if (interaction.commandName === "musicpanel") {
 
       if (interaction.user.id !== OWNER_ID) {
+
         return interaction.reply({
           content: "❌ คำสั่งนี้สำหรับซีม่อนเท่านั้นนะคะ 💖",
           ephemeral: true
@@ -123,51 +174,44 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         new ButtonBuilder()
           .setCustomId("add")
-          .setLabel("➕ ใส่ลิงก์เพลง")
+          .setLabel("➕ เพิ่มเพลง")
           .setStyle(ButtonStyle.Success),
 
         new ButtonBuilder()
           .setCustomId("pause")
-          .setLabel("⏸️ พักเพลง")
+          .setLabel("⏸️ พัก")
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId("resume")
-          .setLabel("▶️ เล่นต่อ")
+          .setLabel("▶️ เล่น")
           .setStyle(ButtonStyle.Primary),
 
         new ButtonBuilder()
           .setCustomId("skip")
-          .setLabel("⏭️ ข้ามเพลง")
+          .setLabel("⏭️ ข้าม")
           .setStyle(ButtonStyle.Danger)
       );
 
+      const embed = createPanel(interaction.guild.id);
+
       await interaction.reply({
-        content:
-`🎵 **Music Panel By Pai 💖**
-
-📌 วิธีใช้งาน:
-➕ ใส่ลิงก์ → เพิ่มเพลง
-⏸️ พัก → หยุดชั่วคราว
-▶️ เล่นต่อ → เล่นต่อ
-⏭️ ข้าม → เพลงถัดไป
-
-👥 สมาชิกกดปุ่มได้
-👑 ซีม่อนเปิด Panel เท่านั้น
-
-✨ สนุกกับเสียงเพลงนะคะ 💕`,
+        embeds: [embed],
         components: [row]
       });
     }
   }
 
-  // Button
+  // =====================
+  // BUTTON
+  // =====================
+
   if (interaction.isButton()) {
 
     const guild = interaction.guild;
     let serverQueue = queue.get(guild.id);
 
-    // ADD SONG
+    // ADD
     if (interaction.customId === "add") {
 
       const modal = new ModalBuilder()
@@ -176,7 +220,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const input = new TextInputBuilder()
         .setCustomId("url")
-        .setLabel("ใส่ลิงก์ YouTube")
+        .setLabel("ใส่ลิงก์ / ชื่อเพลง")
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
@@ -189,14 +233,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // PAUSE
     if (interaction.customId === "pause") {
+
       player.pause();
-      return interaction.reply({ content: "⏸️ พักเพลงแล้วค่ะ", ephemeral: true });
+
+      return interaction.reply({
+        content: "⏸️ พักเพลงแล้วค่ะ 💕",
+        ephemeral: true
+      });
     }
 
     // RESUME
     if (interaction.customId === "resume") {
+
       player.unpause();
-      return interaction.reply({ content: "▶️ เล่นต่อแล้วค่ะ", ephemeral: true });
+
+      return interaction.reply({
+        content: "▶️ เล่นต่อแล้วค่ะ 💖",
+        ephemeral: true
+      });
     }
 
     // SKIP
@@ -207,63 +261,82 @@ client.on(Events.InteractionCreate, async (interaction) => {
       serverQueue.songs.shift();
       playSong(guild, serverQueue.songs[0]);
 
-      return interaction.reply({ content: "⏭️ ข้ามเพลงแล้วค่ะ", ephemeral: true });
+      return interaction.reply({
+        content: "⏭️ ข้ามเพลงแล้วค่ะ 😘",
+        ephemeral: true
+      });
     }
   }
 
+  // =====================
   // MODAL
+  // =====================
+
   if (interaction.type === InteractionType.ModalSubmit) {
 
     if (interaction.customId === "addSong") {
 
-      const url = interaction.fields.getTextInputValue("url");
+      const input = interaction.fields.getTextInputValue("url");
 
-      if (!ytdl.validateURL(url)) {
+      const voice = interaction.member.voice.channel;
+
+      if (!voice) {
+
         return interaction.reply({
-          content: "❌ ลิงก์ไม่ถูกต้องนะคะ",
+          content: "❌ เข้า Voice ก่อนนะคะ 🎧",
           ephemeral: true
         });
       }
 
-      const voiceChannel = interaction.member.voice.channel;
+      let info;
 
-      if (!voiceChannel) {
-        return interaction.reply({
-          content: "❌ ต้องเข้า Voice ก่อนนะคะ 🎧",
-          ephemeral: true
-        });
+      if (ytdl.validateURL(input)) {
+
+        info = await ytdl.getInfo(input);
+
+      } else {
+
+        const r = await yts(input);
+        info = r.videos[0];
       }
 
-      const song = { url };
+      const song = {
+        title: info.title,
+        url: info.url,
+        duration: info.seconds,
+        thumbnail: info.thumbnail
+      };
 
       let serverQueue = queue.get(interaction.guild.id);
 
       if (!serverQueue) {
 
-        const queueData = {
+        const data = {
           connection: null,
           songs: []
         };
 
-        queue.set(interaction.guild.id, queueData);
-        queueData.songs.push(song);
+        queue.set(interaction.guild.id, data);
+
+        data.songs.push(song);
 
         const connection = joinVoiceChannel({
-          channelId: voiceChannel.id,
+          channelId: voice.id,
           guildId: interaction.guild.id,
           adapterCreator: interaction.guild.voiceAdapterCreator
         });
 
-        queueData.connection = connection;
+        data.connection = connection;
 
-        playSong(interaction.guild, queueData.songs[0]);
+        playSong(interaction.guild, data.songs[0]);
 
       } else {
+
         serverQueue.songs.push(song);
       }
 
       await interaction.reply({
-        content: "✅ เพิ่มเพลงเข้าคิวแล้วค่ะ 💕",
+        content: "✅ เพิ่มเพลงเข้าคิวแล้วค่ะ 💕🎶",
         ephemeral: true
       });
     }
