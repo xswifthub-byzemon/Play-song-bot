@@ -40,7 +40,6 @@ const client = new Client({
 
 let stayConnection = null;
 let stayChannel = null;
-
 let autoGreetChannel = null;
 
 // ================= READY =================
@@ -50,19 +49,16 @@ client.once("ready", async () => {
 
 	const commands = [
 
-		// /stayvc
 		new SlashCommandBuilder()
 			.setName("stayvc")
 			.setDescription("ให้บอทเข้า VC ค้าง 24/7 (เฉพาะซีม่อน)")
 			.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-		// /serverinfo
 		new SlashCommandBuilder()
 			.setName("serverinfo")
 			.setDescription("ดูข้อมูลเซิฟเวอร์ (เฉพาะซีม่อน)")
 			.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-		// /autogreet
 		new SlashCommandBuilder()
 			.setName("autogreet")
 			.setDescription("ตั้งค่าระบบทักทายอัตโนมัติ (เฉพาะซีม่อน)")
@@ -86,13 +82,20 @@ function isOwner(interaction) {
 	return interaction.user.id === OWNER_ID;
 }
 
+// ================= HEART REACT =================
+
+const hearts = ["💖", "💗", "💙", "💛", "💜", "💚"];
+
+function randomHeart() {
+	return hearts[Math.floor(Math.random() * hearts.length)];
+}
+
 // ================= INTERACTION =================
 
 client.on("interactionCreate", async (interaction) => {
 
 	if (!interaction.isChatInputCommand()) return;
 
-	// เช็กเจ้าของ
 	if (!isOwner(interaction)) {
 		return interaction.reply({
 			content: "❌ คำสั่งนี้ใช้ได้เฉพาะซีม่อนเท่านั้นนะค้าบ 💢",
@@ -113,7 +116,7 @@ client.on("interactionCreate", async (interaction) => {
 
 		const menu = new StringSelectMenuBuilder()
 			.setCustomId("vc_select")
-			.setPlaceholder("เลือกห้องเสียงที่ต้องการ")
+			.setPlaceholder("🎧 เลือกห้องเสียง")
 			.addOptions(
 				voiceChannels.map(vc => ({
 					label: vc.name,
@@ -124,7 +127,7 @@ client.on("interactionCreate", async (interaction) => {
 		const row = new ActionRowBuilder().addComponents(menu);
 
 		await interaction.reply({
-			content: "🎧 เลือกห้องเสียงที่บอทจะเข้าเลยค้าบ",
+			content: "✨ เลือกห้องที่ Angel จะเข้าเลยค้าบ",
 			components: [row],
 			ephemeral: true
 		});
@@ -144,21 +147,31 @@ client.on("interactionCreate", async (interaction) => {
 		let list = "";
 
 		members.forEach(m => {
-			list += `👤 ${m.user.tag} | 📅 ${m.joinedAt.toLocaleString("th-TH")}\n`;
+			list += `👤 ${m.user.tag}\n📅 ${m.joinedAt.toLocaleString("th-TH")}\n\n`;
 		});
 
 		const embed = new EmbedBuilder()
-			.setColor(0xffc0cb)
+			.setColor(0xff9ad5)
 			.setTitle("📊 ข้อมูลเซิฟเวอร์")
 			.setDescription(
-				`👥 สมาชิกจริง: ${humans.size}\n` +
-				`🤖 บอท: ${bots.size}\n\n` +
+				`━━━━━━━━━━━━━━\n` +
+				`👥 สมาชิกจริง: **${humans.size} คน**\n` +
+				`🤖 บอท: **${bots.size} ตัว**\n` +
+				`━━━━━━━━━━━━━━\n\n` +
 				`📌 รายชื่อทั้งหมด:\n${list}`
 			)
 			.setFooter({ text: "Angel Bot 24/7 🪽" })
 			.setTimestamp();
 
-		await interaction.reply({ embeds: [embed] });
+		await interaction.reply({
+			embeds: [embed],
+			ephemeral: true
+		});
+
+		// ลบใน 10 วิ
+		setTimeout(() => {
+			interaction.deleteReply().catch(() => {});
+		}, 10000);
 	}
 
 	// ================= /autogreet =================
@@ -185,7 +198,6 @@ client.on("interactionCreate", async (interaction) => {
 
 	if (interaction.customId !== "vc_select") return;
 
-	// เช็กเจ้าของ
 	if (interaction.user.id !== OWNER_ID) {
 		return interaction.reply({
 			content: "❌ เฉพาะซีม่อนเท่านั้นนะค้าบ 💢",
@@ -214,7 +226,6 @@ client.on("interactionCreate", async (interaction) => {
 
 		await entersState(stayConnection, VoiceConnectionStatus.Ready, 30000);
 
-		// Auto Reconnect
 		stayConnection.on(VoiceConnectionStatus.Disconnected, async () => {
 
 			try {
@@ -250,7 +261,7 @@ client.on("interactionCreate", async (interaction) => {
 
 // ================= AUTO GREET =================
 
-function sendEmbed(title, msg) {
+async function sendEmbed(title, msg, color) {
 
 	if (!autoGreetChannel) return;
 
@@ -259,50 +270,86 @@ function sendEmbed(title, msg) {
 	if (!channel) return;
 
 	const embed = new EmbedBuilder()
-		.setColor(0xffb6c1)
+		.setColor(color)
 		.setTitle(title)
 		.setDescription(msg)
 		.setFooter({ text: "Angel Bot 24/7 🪽" })
 		.setTimestamp();
 
-	channel.send({
+	const message = await channel.send({
 		content: "@everyone @here",
 		embeds: [embed]
 	});
+
+	// ใส่หัวใจอัตโนมัติ
+	await message.react(randomHeart());
 }
+
+// ================= CRON MESSAGE =================
 
 // 06:00
 cron.schedule("0 6 * * *", () => {
-	sendEmbed("🌤️ สวัสดีตอนเช้า",
-		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n🌞 ตื่นได้แล้ว\n🛁 อาบน้ำ กินข้าว\n📚 ไปเรียน ไปทำงาน\n✨ สู้ๆนะค้าบ 💕"
+	sendEmbed(
+		"🌤️ สวัสดีตอนเช้า",
+		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n\n" +
+		"🌞 เช้าแล้วนะ ตื่นได้แล้ววว\n" +
+		"🛁 อาบน้ำ แปรงฟัน ล้างหน้า\n" +
+		"🍳 กินข้าวให้อิ่มๆ\n" +
+		"📚 ไปเรียน / ไปทำงาน / ไปเล่น\n\n" +
+		"✨ ขอให้วันนี้สดใสทั้งวันนะค้าบ 💕",
+		0xffc1dc
 	);
 });
 
 // 12:00
 cron.schedule("0 12 * * *", () => {
-	sendEmbed("🍽️ เที่ยงแล้ว",
-		"🍛 อย่าลืมกินข้าวนะค้าบ\n🥤 ดื่มน้ำเยอะๆ\n🫶 ดูแลตัวเองด้วยน้า"
+	sendEmbed(
+		"🍽️ เที่ยงแล้ว",
+		"💗 เที่ยงแล้วน้าา~\n\n" +
+		"🍛 อย่าลืมกินข้าวนะค้าบ\n" +
+		"🥤 ดื่มน้ำเยอะๆด้วย\n" +
+		"🧠 พักสายตาบ้าง\n\n" +
+		"✨ ดูแลตัวเองดีๆนะค้าบ 🫶",
+		0xffe066
 	);
 });
 
 // 17:00
 cron.schedule("0 17 * * *", () => {
-	sendEmbed("🌇 ตอนเย็นแล้ว",
-		"😴 เหนื่อยมาทั้งวัน\n🍜 ไปหาอะไรกิน\n💖 เก่งมากทุกคน"
+	sendEmbed(
+		"🌇 ตอนเย็นแล้ว",
+		"💕 เย็นแล้ววว~\n\n" +
+		"😴 เหนื่อยมาทั้งวันเลยใช่ม้า\n" +
+		"🍜 ไปหาอะไรกินอร่อยๆ\n" +
+		"🏠 กลับบ้านปลอดภัยนะ\n\n" +
+		"✨ เก่งมากทุกคนเลย 💖",
+		0xa29bfe
 	);
 });
 
 // 22:00
 cron.schedule("0 22 * * *", () => {
-	sendEmbed("🌙 Good Night",
-		"📱 วางมือถือบ้างน้า\n🛏️ ไปนอนได้แล้ว\n💫 ฝันดีค้าบ"
+	sendEmbed(
+		"🌙 Good Night",
+		"💫 ดึกแล้วนะค้าบ~\n\n" +
+		"📱 วางมือถือบ้างน้า\n" +
+		"🛏️ ไปนอนได้แล้ว\n" +
+		"😴 พักผ่อนให้พอ\n\n" +
+		"✨ ฝันดีนะค้าบทุกคน 💖",
+		0x74b9ff
 	);
 });
 
 // 00:00
 cron.schedule("0 0 * * *", () => {
-	sendEmbed("🎊 วันใหม่แล้ว",
-		"🌈 เริ่มใหม่อีกวัน\n🚀 ขอให้ปังๆ\n🪽 Angel อยู่ข้างๆเสมอ"
+	sendEmbed(
+		"🎊 วันใหม่แล้ว",
+		"💖 ติ๊งงง~ วันใหม่มาแล้วว\n\n" +
+		"🌈 เริ่มต้นใหม่อีกวัน\n" +
+		"🚀 ขอให้ปังกว่าเดิม\n" +
+		"🪽 Angel อยู่ข้างๆเสมอ\n\n" +
+		"✨ สู้ๆนะค้าบ 💕",
+		0x55efc4
 	);
 });
 
