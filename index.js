@@ -1,6 +1,6 @@
 // ===============================
-// 🎵 Pai Music Bot PRO V3 By Pai 💖
-// For ซีม่อน
+// 🎵 Pai Music Bot PRO V4 By Pai 💖
+// For ซีม่อน (Stable Version)
 // ===============================
 
 const {
@@ -26,7 +26,7 @@ const {
   NoSubscriberBehavior
 } = require("@discordjs/voice");
 
-const play = require("play-dl");
+const ytdl = require("ytdl-core");
 require("dotenv").config();
 
 // ===============================
@@ -52,7 +52,7 @@ const queue = new Map();
 
 const player = createAudioPlayer({
   behaviors: {
-    noSubscriber: NoSubscriberBehavior.Pause
+    noSubscriber: NoSubscriberBehavior.Play
   }
 });
 
@@ -62,7 +62,7 @@ const player = createAudioPlayer({
 
 client.once("ready", async () => {
 
-  console.log("🎧 Pai Music Bot PRO V3 Online!");
+  console.log("🎧 Pai Music Bot PRO V4 Online!");
 
   const cmd = new SlashCommandBuilder()
     .setName("musicpanel")
@@ -118,7 +118,7 @@ function createPanel(guildId) {
 }
 
 // ===============================
-// PLAY
+// PLAY SONG
 // ===============================
 
 async function playSong(guild, song) {
@@ -132,11 +132,13 @@ async function playSong(guild, song) {
     return;
   }
 
-  const stream = await play.stream(song.url);
-
-  const resource = createAudioResource(stream.stream, {
-    inputType: stream.type
+  const stream = ytdl(song.url, {
+    filter: "audioonly",
+    quality: "highestaudio",
+    highWaterMark: 1 << 25
   });
+
+  const resource = createAudioResource(stream);
 
   player.play(resource);
   serverQueue.connection.subscribe(player);
@@ -163,7 +165,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         return interaction.reply({
           content: "❌ คำสั่งนี้สำหรับซีม่อนเท่านั้นนะคะ 💖",
-          ephemeral: true
+          flags: 64
         });
       }
 
@@ -211,7 +213,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       return interaction.reply({
         content: "⏸️ พักเพลงแล้วค่ะ 💕",
-        ephemeral: true
+        flags: 64
       });
     }
 
@@ -221,7 +223,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       return interaction.reply({
         content: "▶️ เล่นต่อแล้วค่ะ 💖",
-        ephemeral: true
+        flags: 64
       });
     }
 
@@ -234,7 +236,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       return interaction.reply({
         content: "⏭️ ข้ามเพลงแล้วค่ะ 😘",
-        ephemeral: true
+        flags: 64
       });
     }
 
@@ -246,7 +248,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const input = new TextInputBuilder()
         .setCustomId("url")
-        .setLabel("ใส่ลิงก์ YouTube")
+        .setLabel("ใส่ลิงก์ YouTube เท่านั้น")
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
@@ -265,11 +267,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const url = interaction.fields.getTextInputValue("url");
 
-      if (!play.yt_validate(url)) {
+      if (!ytdl.validateURL(url)) {
 
         return interaction.reply({
-          content: "❌ ลิงก์ไม่ถูกต้องนะคะ 💔",
-          ephemeral: true
+          content: "❌ ต้องเป็นลิงก์ YouTube เท่านั้นนะคะ 💔",
+          flags: 64
         });
       }
 
@@ -279,17 +281,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         return interaction.reply({
           content: "❌ เข้า Voice ก่อนนะคะ 🎧",
-          ephemeral: true
+          flags: 64
         });
       }
 
-      const info = await play.video_basic_info(url);
+      const info = await ytdl.getInfo(url);
 
       const song = {
-        title: info.video_details.title,
-        url: info.video_details.url,
-        duration: info.video_details.durationInSec,
-        thumbnail: info.video_details.thumbnails[0].url
+        title: info.videoDetails.title,
+        url: info.videoDetails.video_url,
+        duration: info.videoDetails.lengthSeconds,
+        thumbnail: info.videoDetails.thumbnails[0].url
       };
 
       let serverQueue = queue.get(interaction.guild.id);
@@ -322,7 +324,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.reply({
         content: "✅ เพิ่มเพลงเข้าคิวแล้วค่ะ 💕🎶",
-        ephemeral: true
+        flags: 64
       });
     }
   }
