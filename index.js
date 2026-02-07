@@ -1,5 +1,5 @@
 // ===============================
-// 🎵 Pai Music Bot PRO By Pai 💖
+// 🎵 Pai Music Bot PRO V3 By Pai 💖
 // For ซีม่อน
 // ===============================
 
@@ -26,9 +26,7 @@ const {
   NoSubscriberBehavior
 } = require("@discordjs/voice");
 
-const ytdl = require("ytdl-core");
-const yts = require("yt-search");
-
+const play = require("play-dl");
 require("dotenv").config();
 
 // ===============================
@@ -64,7 +62,7 @@ const player = createAudioPlayer({
 
 client.once("ready", async () => {
 
-  console.log("🎧 Pai Music Bot PRO Online!");
+  console.log("🎧 Pai Music Bot PRO V3 Online!");
 
   const cmd = new SlashCommandBuilder()
     .setName("musicpanel")
@@ -74,17 +72,19 @@ client.once("ready", async () => {
 });
 
 // ===============================
-// TIME FORMAT
+// TIME
 // ===============================
 
 function formatTime(sec) {
+
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
+
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 // ===============================
-// PANEL EMBED
+// PANEL
 // ===============================
 
 function createPanel(guildId) {
@@ -94,9 +94,9 @@ function createPanel(guildId) {
   if (!serverQueue || !serverQueue.songs[0]) {
 
     return new EmbedBuilder()
-      .setColor("#ffb6ff")
+      .setColor("#ff99dd")
       .setTitle("🎧 Music Panel")
-      .setDescription("❌ ตอนนี้ยังไม่มีเพลงในคิวนะคะ 💔");
+      .setDescription("❌ ยังไม่มีเพลงในคิวนะคะ 💔");
   }
 
   const song = serverQueue.songs[0];
@@ -113,7 +113,7 @@ function createPanel(guildId) {
 
 📃 คิวทั้งหมด: ${serverQueue.songs.length} เพลง
 
-💗 สนุกกับเสียงเพลงนะคะซีม่อน 😘`
+💗 ฟังเพลินๆนะคะซีม่อน 😘`
     );
 }
 
@@ -126,17 +126,17 @@ async function playSong(guild, song) {
   const serverQueue = queue.get(guild.id);
 
   if (!song) {
+
     serverQueue.connection.destroy();
     queue.delete(guild.id);
     return;
   }
 
-  const stream = ytdl(song.url, {
-    filter: "audioonly",
-    highWaterMark: 1 << 25
-  });
+  const stream = await play.stream(song.url);
 
-  const resource = createAudioResource(stream);
+  const resource = createAudioResource(stream.stream, {
+    inputType: stream.type
+  });
 
   player.play(resource);
   serverQueue.connection.subscribe(player);
@@ -154,10 +154,7 @@ async function playSong(guild, song) {
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
-  // =====================
   // SLASH
-  // =====================
-
   if (interaction.isChatInputCommand()) {
 
     if (interaction.commandName === "musicpanel") {
@@ -202,36 +199,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   }
 
-  // =====================
   // BUTTON
-  // =====================
-
   if (interaction.isButton()) {
 
     const guild = interaction.guild;
-    let serverQueue = queue.get(guild.id);
+    const serverQueue = queue.get(guild.id);
 
-    // ADD
-    if (interaction.customId === "add") {
-
-      const modal = new ModalBuilder()
-        .setCustomId("addSong")
-        .setTitle("🎵 เพิ่มเพลง");
-
-      const input = new TextInputBuilder()
-        .setCustomId("url")
-        .setLabel("ใส่ลิงก์ / ชื่อเพลง")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(input)
-      );
-
-      return interaction.showModal(modal);
-    }
-
-    // PAUSE
     if (interaction.customId === "pause") {
 
       player.pause();
@@ -242,7 +215,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // RESUME
     if (interaction.customId === "resume") {
 
       player.unpause();
@@ -253,7 +225,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // SKIP
     if (interaction.customId === "skip") {
 
       if (!serverQueue) return;
@@ -266,17 +237,41 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ephemeral: true
       });
     }
+
+    if (interaction.customId === "add") {
+
+      const modal = new ModalBuilder()
+        .setCustomId("addSong")
+        .setTitle("🎵 เพิ่มเพลง");
+
+      const input = new TextInputBuilder()
+        .setCustomId("url")
+        .setLabel("ใส่ลิงก์ YouTube")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(input)
+      );
+
+      return interaction.showModal(modal);
+    }
   }
 
-  // =====================
   // MODAL
-  // =====================
-
   if (interaction.type === InteractionType.ModalSubmit) {
 
     if (interaction.customId === "addSong") {
 
-      const input = interaction.fields.getTextInputValue("url");
+      const url = interaction.fields.getTextInputValue("url");
+
+      if (!play.yt_validate(url)) {
+
+        return interaction.reply({
+          content: "❌ ลิงก์ไม่ถูกต้องนะคะ 💔",
+          ephemeral: true
+        });
+      }
 
       const voice = interaction.member.voice.channel;
 
@@ -288,23 +283,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      let info;
-
-      if (ytdl.validateURL(input)) {
-
-        info = await ytdl.getInfo(input);
-
-      } else {
-
-        const r = await yts(input);
-        info = r.videos[0];
-      }
+      const info = await play.video_basic_info(url);
 
       const song = {
-        title: info.title,
-        url: info.url,
-        duration: info.seconds,
-        thumbnail: info.thumbnail
+        title: info.video_details.title,
+        url: info.video_details.url,
+        duration: info.video_details.durationInSec,
+        thumbnail: info.video_details.thumbnails[0].url
       };
 
       let serverQueue = queue.get(interaction.guild.id);
