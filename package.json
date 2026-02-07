@@ -1,19 +1,14 @@
 {
-  "name": "pai-music-bot-pro",
-  "version": "5.0.0",
-  "description": "Discord Music Bot By Pai For Simon",
+  "name": "angel-bot",
+  "version": "1.0.0",
   "main": "index.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "@discordjs/voice": "^0.17.0",
-    "@distube/ytdl-core": "^4.13.5",
-    "dotenv": "^16.3.1"
-  },
-  "engines": {
-    "node": ">=18.x"
+    "@discordjs/voice": "^0.16.0",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3"
   }
 }
