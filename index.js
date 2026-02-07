@@ -9,9 +9,8 @@ const {
 	GatewayIntentBits,
 	SlashCommandBuilder,
 	EmbedBuilder,
-	ActionRowBuilder,
-	StringSelectMenuBuilder,
 	ChannelType,
+	PermissionFlagsBits,
 } = require("discord.js");
 
 const {
@@ -70,7 +69,14 @@ client.once("ready", async () => {
 	const commands = [
 		new SlashCommandBuilder()
 			.setName("stayvc")
-			.setDescription("ให้บอทเข้า VC ค้าง 24/7"),
+			.setDescription("ให้บอทเข้า VC ค้าง 24/7")
+			.addChannelOption((opt) =>
+				opt
+					.setName("voice")
+					.setDescription("เลือกห้องเสียง")
+					.setRequired(true)
+					.addChannelTypes(ChannelType.GuildVoice)
+			),
 
 		new SlashCommandBuilder()
 			.setName("serverinfo")
@@ -125,119 +131,31 @@ function randomHeart() {
 // ================= INTERACTION =================
 
 client.on("interactionCreate", async (i) => {
-	// ================= SLASH =================
+	if (!i.isChatInputCommand()) return;
 
-	if (i.isChatInputCommand()) {
-		if (!isOwner(i)) {
-			return i.reply({
-				content: "❌ เฉพาะซีม่อนเท่านั้นนะค้าบ",
-				ephemeral: true,
-			});
-		}
-
-		// ================= stayvc =================
-
-		if (i.commandName === "stayvc") {
-			const vcs = i.guild.channels.cache.filter(
-				(c) => c.type === ChannelType.GuildVoice
-			);
-
-			if (!vcs.size) {
-				return i.reply({
-					content: "❌ ไม่มีห้องเสียงในเซิฟนี้ค้าบ",
-					ephemeral: true,
-				});
-			}
-
-			const menu = new StringSelectMenuBuilder()
-				.setCustomId("vc_select")
-				.setPlaceholder("🎧 เลือกห้อง")
-				.addOptions(
-					vcs.map((v) => ({
-						label: v.name,
-						value: v.id,
-					}))
-				);
-
-			await i.reply({
-				components: [new ActionRowBuilder().addComponents(menu)],
-				ephemeral: true,
-			});
-		}
-
-		// ================= serverinfo =================
-
-		if (i.commandName === "serverinfo") {
-			const g = i.guild;
-
-			const embed = new EmbedBuilder()
-				.setColor(0xffc1dc)
-				.setTitle("📊 ข้อมูลเซิฟเวอร์")
-				.setThumbnail(g.iconURL({ dynamic: true }))
-				.setDescription(
-					`🏷️ ชื่อ: ${g.name}\n` +
-						`🆔 ID: ${g.id}\n` +
-						`👑 เจ้าของ: <@${g.ownerId}>\n` +
-						`👥 สมาชิก: ${g.memberCount}\n` +
-						`📁 หมวดหมู่: ${g.channels.cache.filter(
-							(c) => c.type === ChannelType.GuildCategory
-						).size}\n` +
-						`💬 ห้องแชท: ${g.channels.cache.filter(
-							(c) => c.type === ChannelType.GuildText
-						).size}\n` +
-						`🎧 ห้องเสียง: ${g.channels.cache.filter(
-							(c) => c.type === ChannelType.GuildVoice
-						).size}\n\n` +
-						`📅 สร้างเมื่อ: ${g.createdAt.toLocaleString("th-TH")}`
-				)
-				.setTimestamp();
-
-			await i.reply({ embeds: [embed] });
-		}
-
-		// ================= autogreet =================
-
-		if (i.commandName === "autogreet") {
-			const ch = i.options.getChannel("channel");
-
-			data.autoGreet = ch.id;
-			saveData();
-
-			await i.reply(`✅ ตั้งค่าทักทายที่ <#${ch.id}> แล้วค้าบ 💖`);
-		}
-
-		// ================= setnotify =================
-
-		if (i.commandName === "setnotify") {
-			data.createLog = i.options.getChannel("create").id;
-			data.deleteLog = i.options.getChannel("delete").id;
-			data.vcJoin = i.options.getChannel("join").id;
-			data.vcLeave = i.options.getChannel("leave").id;
-
-			saveData();
-
-			await i.reply("✅ ตั้งค่าระบบแจ้งเตือนเรียบร้อยแล้วค้าบ 💖");
-		}
+	if (!isOwner(i)) {
+		return i.reply({
+			content: "❌ เฉพาะซีม่อนเท่านั้นนะค้าบ",
+			flags: 64,
+		});
 	}
 
-	// ================= SELECT MENU =================
+	// ================= stayvc =================
 
-	if (i.isStringSelectMenu()) {
-		if (i.customId === "vc_select") {
-			const vcId = i.values[0];
-			const vc = i.guild.channels.cache.get(vcId);
+	if (i.commandName === "stayvc") {
+		const vc = i.options.getChannel("voice");
 
-			if (!vc) {
-				return i.reply({
-					content: "❌ ไม่พบห้องเสียง",
-					ephemeral: true,
-				});
-			}
+		if (!vc) {
+			return i.reply({
+				content: "❌ ไม่พบห้องเสียง",
+				flags: 64,
+			});
+		}
 
-			let conn = getVoiceConnection(i.guild.id);
+		let conn = getVoiceConnection(i.guild.id);
+		if (conn) conn.destroy();
 
-			if (conn) conn.destroy();
-
+		try {
 			conn = joinVoiceChannel({
 				channelId: vc.id,
 				guildId: i.guild.id,
@@ -246,22 +164,101 @@ client.on("interactionCreate", async (i) => {
 				selfMute: false,
 			});
 
-			try {
-				await entersState(conn, VoiceConnectionStatus.Ready, 15000);
+			await entersState(conn, VoiceConnectionStatus.Ready, 15000);
 
-				await i.reply({
-					content: `✅ เข้า VC: **${vc.name}** แล้วค้าบ 💖`,
-					ephemeral: true,
-				});
-			} catch (e) {
-				conn.destroy();
+			const msg = await i.reply({
+				content: `✅ เข้า VC: **${vc.name}** แล้วค้าบ 💖`,
+				flags: 64,
+			});
 
-				await i.reply({
-					content: "❌ เข้า VC ไม่สำเร็จค้าบ",
-					ephemeral: true,
-				});
-			}
+			setTimeout(() => {
+				i.deleteReply().catch(() => {});
+			}, 10000);
+		} catch (e) {
+			if (conn) conn.destroy();
+
+			const msg = await i.reply({
+				content: "❌ เข้า VC ไม่สำเร็จค้าบ",
+				flags: 64,
+			});
+
+			setTimeout(() => {
+				i.deleteReply().catch(() => {});
+			}, 10000);
 		}
+	}
+
+	// ================= serverinfo =================
+
+	if (i.commandName === "serverinfo") {
+		const g = i.guild;
+
+		await g.members.fetch();
+
+		const humans = g.members.cache.filter((m) => !m.user.bot).size;
+		const bots = g.members.cache.filter((m) => m.user.bot).size;
+
+		const embed = new EmbedBuilder()
+			.setColor(0xffc1dc)
+			.setTitle("📊 ข้อมูลเซิฟเวอร์")
+			.setThumbnail(g.iconURL({ dynamic: true }))
+			.setDescription(
+				`🏷️ ชื่อ: ${g.name}\n` +
+					`🆔 ID: ${g.id}\n` +
+					`👑 เจ้าของ: <@${g.ownerId}>\n` +
+					`👤 สมาชิกจริง: ${humans}\n` +
+					`🤖 บอท: ${bots}\n` +
+					`📁 หมวดหมู่: ${g.channels.cache.filter(
+						(c) => c.type === ChannelType.GuildCategory
+					).size}\n` +
+					`💬 ห้องแชท: ${g.channels.cache.filter(
+						(c) => c.type === ChannelType.GuildText
+					).size}\n` +
+					`🎧 ห้องเสียง: ${g.channels.cache.filter(
+						(c) => c.type === ChannelType.GuildVoice
+					).size}\n\n` +
+					`📅 สร้างเมื่อ: ${g.createdAt.toLocaleString("th-TH")}`
+			)
+			.setTimestamp();
+
+		await i.reply({
+			embeds: [embed],
+			flags: 64,
+		});
+
+		setTimeout(() => {
+			i.deleteReply().catch(() => {});
+		}, 10000);
+	}
+
+	// ================= autogreet =================
+
+	if (i.commandName === "autogreet") {
+		const ch = i.options.getChannel("channel");
+
+		data.autoGreet = ch.id;
+		saveData();
+
+		await i.reply({
+			content: `✅ ตั้งค่าทักทายที่ <#${ch.id}> แล้วค้าบ 💖`,
+			flags: 64,
+		});
+	}
+
+	// ================= setnotify =================
+
+	if (i.commandName === "setnotify") {
+		data.createLog = i.options.getChannel("create").id;
+		data.deleteLog = i.options.getChannel("delete").id;
+		data.vcJoin = i.options.getChannel("join").id;
+		data.vcLeave = i.options.getChannel("leave").id;
+
+		saveData();
+
+		await i.reply({
+			content: "✅ ตั้งค่าระบบแจ้งเตือนเรียบร้อยแล้วค้าบ 💖",
+			flags: 64,
+		});
 	}
 });
 
