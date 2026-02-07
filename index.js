@@ -10,7 +10,7 @@ const {
 	SlashCommandBuilder,
 	EmbedBuilder,
 	ChannelType,
-	PermissionFlagsBits,
+	PermissionsBitField,
 } = require("discord.js");
 
 const {
@@ -152,6 +152,23 @@ client.on("interactionCreate", async (i) => {
 			});
 		}
 
+		// ===== CHECK PERMISSION =====
+
+		const me = i.guild.members.me;
+
+		const perms = vc.permissionsFor(me);
+
+		if (
+			!perms.has(PermissionsBitField.Flags.Connect) ||
+			!perms.has(PermissionsBitField.Flags.Speak) ||
+			!perms.has(PermissionsBitField.Flags.ViewChannel)
+		) {
+			return i.reply({
+				content: "❌ บอทไม่มีสิทธิ์เข้า VC ห้องนี้ค้าบ",
+				flags: 64,
+			});
+		}
+
 		let conn = getVoiceConnection(i.guild.id);
 		if (conn) conn.destroy();
 
@@ -164,9 +181,9 @@ client.on("interactionCreate", async (i) => {
 				selfMute: false,
 			});
 
-			await entersState(conn, VoiceConnectionStatus.Ready, 15000);
+			await entersState(conn, VoiceConnectionStatus.Ready, 20000);
 
-			const msg = await i.reply({
+			await i.reply({
 				content: `✅ เข้า VC: **${vc.name}** แล้วค้าบ 💖`,
 				flags: 64,
 			});
@@ -177,7 +194,9 @@ client.on("interactionCreate", async (i) => {
 		} catch (e) {
 			if (conn) conn.destroy();
 
-			const msg = await i.reply({
+			console.error("VC ERROR:", e);
+
+			await i.reply({
 				content: "❌ เข้า VC ไม่สำเร็จค้าบ",
 				flags: 64,
 			});
@@ -260,183 +279,6 @@ client.on("interactionCreate", async (i) => {
 			flags: 64,
 		});
 	}
-});
-
-// ================= LOG SEND =================
-
-function sendLog(channelId, embed) {
-	if (!channelId) return;
-
-	const ch = client.channels.cache.get(channelId);
-	if (!ch) return;
-
-	ch.send({ embeds: [embed] });
-}
-
-// ================= CHANNEL CREATE =================
-
-client.on("channelCreate", async (ch) => {
-	let executor = "ไม่ทราบผู้ใช้";
-
-	try {
-		const logs = await ch.guild.fetchAuditLogs({
-			type: 10,
-			limit: 1,
-		});
-
-		const entry = logs.entries.first();
-
-		if (entry?.executor) {
-			executor = `<@${entry.executor.id}>`;
-		}
-	} catch {}
-
-	const embed = new EmbedBuilder()
-		.setColor(0x55efc4)
-		.setTitle("📁 สร้างห้องใหม่")
-		.setDescription(
-			`👤 ${executor}\n` +
-				`📂 ในหมวดหมู่ : ${
-					ch.parent ? ch.parent.name : "ไม่มีหมวด"
-				}\n` +
-				`#️⃣ ชื่อห้อง : ${ch.name}\n\n` +
-				`📅 ${new Date().toLocaleString("th-TH")}`
-		)
-		.setTimestamp();
-
-	sendLog(data.createLog, embed);
-});
-
-// ================= CHANNEL DELETE =================
-
-client.on("channelDelete", async (ch) => {
-	let executor = "ไม่ทราบผู้ใช้";
-
-	try {
-		const logs = await ch.guild.fetchAuditLogs({
-			type: 12,
-			limit: 1,
-		});
-
-		const entry = logs.entries.first();
-
-		if (entry?.executor) {
-			executor = `<@${entry.executor.id}>`;
-		}
-	} catch {}
-
-	const embed = new EmbedBuilder()
-		.setColor(0xff7675)
-		.setTitle("🗑️ ลบห้อง")
-		.setDescription(
-			`👤 ${executor}\n` +
-				`📂 ในหมวดหมู่ : ${
-					ch.parent ? ch.parent.name : "ไม่มีหมวด"
-				}\n` +
-				`#️⃣ ชื่อห้อง : ${ch.name}\n\n` +
-				`📅 ${new Date().toLocaleString("th-TH")}`
-		)
-		.setTimestamp();
-
-	sendLog(data.deleteLog, embed);
-});
-
-// ================= VOICE =================
-
-client.on("voiceStateUpdate", (oldS, newS) => {
-	const user = newS.member || oldS.member;
-
-	if (!oldS.channel && newS.channel) {
-		const embed = new EmbedBuilder()
-			.setColor(0x74b9ff)
-			.setTitle("🎧 เข้า VC")
-			.setDescription(
-				`👤 ${user}\n` +
-					`🔊 <#${newS.channel.id}>\n\n` +
-					`📅 ${new Date().toLocaleString("th-TH")}`
-			);
-
-		sendLog(data.vcJoin, embed);
-	}
-
-	if (oldS.channel && !newS.channel) {
-		const embed = new EmbedBuilder()
-			.setColor(0xa29bfe)
-			.setTitle("🚪 ออก VC")
-			.setDescription(
-				`👤 ${user}\n` +
-					`🔊 <#${oldS.channel.id}>\n\n` +
-					`📅 ${new Date().toLocaleString("th-TH")}`
-			);
-
-		sendLog(data.vcLeave, embed);
-	}
-});
-
-// ================= AUTO GREET =================
-
-async function sendEmbed(title, msg, color) {
-	if (!data.autoGreet) return;
-
-	const ch = client.channels.cache.get(data.autoGreet);
-	if (!ch) return;
-
-	const embed = new EmbedBuilder()
-		.setColor(color)
-		.setTitle(title)
-		.setDescription(msg)
-		.setImage(IMAGE_URL)
-		.setFooter({ text: "Angel Bot 24/7 🪽" })
-		.setTimestamp();
-
-	const m = await ch.send({
-		content: "@everyone @here",
-		embeds: [embed],
-	});
-
-	await m.react(randomHeart());
-}
-
-// ================= CRON =================
-
-cron.schedule("0 6 * * *", () => {
-	sendEmbed(
-		"🌤️ สวัสดีตอนเช้า",
-		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n\n🌞 เช้าแล้วนะ ตื่นได้แล้ววว\n🛁 อาบน้ำ แปรงฟัน ล้างหน้า\n🍳 กินข้าวให้อิ่มๆ\n📚 ไปเรียน / ไปทำงาน / ไปเล่น\n\n✨ ขอให้วันนี้สดใสทั้งวันนะค้าบ 💕",
-		0xffc1dc
-	);
-});
-
-cron.schedule("0 12 * * *", () => {
-	sendEmbed(
-		"🍽️ เที่ยงแล้ว",
-		"💗 เที่ยงแล้วน้าา~\n\n🍛 อย่าลืมกินข้าวนะค้าบ\n🥤 ดื่มน้ำเยอะๆด้วย\n🧠 พักสายตาบ้าง\n\n✨ ดูแลตัวเองดีๆนะค้าบ 🫶",
-		0xffe066
-	);
-});
-
-cron.schedule("0 17 * * *", () => {
-	sendEmbed(
-		"🌇 ตอนเย็นแล้ว",
-		"💕 เย็นแล้ววว~\n\n😴 เหนื่อยมาทั้งวันเลยใช่ม้า\n🍜 ไปหาอะไรกินอร่อยๆ\n🏠 กลับบ้านปลอดภัยนะ\n\n✨ เก่งมากทุกคนเลย 💖",
-		0xa29bfe
-	);
-});
-
-cron.schedule("0 22 * * *", () => {
-	sendEmbed(
-		"🌙 Good Night",
-		"💫 ดึกแล้วนะค้าบ~\n\n📱 วางมือถือบ้างน้า\n🛏️ ไปนอนได้แล้ว\n😴 พักผ่อนให้พอ\n\n✨ ฝันดีนะค้าบทุกคน 💖",
-		0x74b9ff
-	);
-});
-
-cron.schedule("0 0 * * *", () => {
-	sendEmbed(
-		"🎊 วันใหม่แล้ว",
-		"💖 ติ๊งงง~ วันใหม่มาแล้วว\n\n🌈 เริ่มต้นใหม่อีกวัน\n🚀 ขอให้ปังกว่าเดิม\n🪽 Angel อยู่ข้างๆเสมอ\n\n✨ สู้ๆนะค้าบ 💕",
-		0x55efc4
-	);
 });
 
 // ================= LOGIN =================
