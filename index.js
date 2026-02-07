@@ -1,337 +1,297 @@
-// ===============================
-// 🎵 Pai Music Bot PRO V5 By Pai 💖
-// For ซีม่อน (YouTube Fixed)
-// ===============================
+// Angel Bot 24/7 🪽
+// By Pai 💖 For ซีม่อน
+
+require("dotenv").config();
 
 const {
-  Client,
-  GatewayIntentBits,
-  SlashCommandBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  Events,
-  InteractionType,
-  EmbedBuilder
+	Client,
+	GatewayIntentBits,
+	SlashCommandBuilder,
+	PermissionFlagsBits,
+	EmbedBuilder,
+	ActionRowBuilder,
+	StringSelectMenuBuilder,
+	ChannelType,
 } = require("discord.js");
 
 const {
-  joinVoiceChannel,
-  createAudioPlayer,
-  createAudioResource,
-  AudioPlayerStatus,
-  NoSubscriberBehavior
+	joinVoiceChannel,
+	entersState,
+	VoiceConnectionStatus,
 } = require("@discordjs/voice");
 
-const ytdl = require("@distube/ytdl-core");
-require("dotenv").config();
+const cron = require("node-cron");
 
-// ===============================
-// CONFIG
-// ===============================
+// ================= CONFIG =================
 
-const OWNER_ID = process.env.OWNER_ID;
+const TOKEN = process.env.TOKEN;
 
-// ===============================
+// ================= CLIENT =================
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates
-  ]
+	intents: [
+		GatewayIntentBits.Guilds,
+		GatewayIntentBits.GuildMembers,
+		GatewayIntentBits.GuildVoiceStates,
+		GatewayIntentBits.GuildMessages,
+	],
 });
 
-const queue = new Map();
+let stayConnection = null;
+let stayChannel = null;
 
-// ===============================
-// PLAYER
-// ===============================
+let autoGreetChannel = null;
 
-const player = createAudioPlayer({
-  behaviors: {
-    noSubscriber: NoSubscriberBehavior.Play
-  }
-});
-
-// ===============================
-// READY
-// ===============================
+// ================= READY =================
 
 client.once("ready", async () => {
+	console.log(`✅ Logged in as ${client.user.tag}`);
 
-  console.log("🎧 Pai Music Bot PRO V5 Online!");
+	// Register Commands
+	const commands = [
 
-  const cmd = new SlashCommandBuilder()
-    .setName("musicpanel")
-    .setDescription("🎵 เปิดแผงควบคุมเพลง (เฉพาะซีม่อน)");
+		// /stayvc
+		new SlashCommandBuilder()
+			.setName("stayvc")
+			.setDescription("ให้บอทเข้า VC ค้าง 24/7 (Owner Only)")
+			.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-  await client.application.commands.create(cmd);
+		// /serverinfo
+		new SlashCommandBuilder()
+			.setName("serverinfo")
+			.setDescription("ดูข้อมูลเซิฟเวอร์ (Owner Only)")
+			.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+		// /autogreet
+		new SlashCommandBuilder()
+			.setName("autogreet")
+			.setDescription("ตั้งค่าระบบทักทายอัตโนมัติ")
+			.addChannelOption(opt =>
+				opt.setName("channel")
+					.setDescription("เลือกช่องส่งข้อความ")
+					.setRequired(true)
+			)
+			.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+	].map(cmd => cmd.toJSON());
+
+	await client.application.commands.set(commands);
+
+	console.log("✅ Slash Commands Registered");
 });
 
-// ===============================
-// TIME
-// ===============================
+// ================= INTERACTION =================
 
-function formatTime(sec) {
+client.on("interactionCreate", async (interaction) => {
 
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
+	if (!interaction.isChatInputCommand()) return;
 
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+	const ownerId = interaction.guild.ownerId;
 
-// ===============================
-// PANEL
-// ===============================
+	// Owner Check
+	if (interaction.user.id !== ownerId) {
+		return interaction.reply({
+			content: "❌ คำสั่งนี้ใช้ได้เฉพาะเจ้าของเซิฟเท่านั้นนะค้าบ 💢",
+			ephemeral: true
+		});
+	}
 
-function createPanel(guildId) {
+	// ================= /stayvc =================
 
-  const serverQueue = queue.get(guildId);
+	if (interaction.commandName === "stayvc") {
 
-  if (!serverQueue || !serverQueue.songs[0]) {
+		const voiceChannels = interaction.guild.channels.cache
+			.filter(ch => ch.type === ChannelType.GuildVoice);
 
-    return new EmbedBuilder()
-      .setColor("#ff99dd")
-      .setTitle("🎧 Music Panel")
-      .setDescription("❌ ยังไม่มีเพลงในคิวนะคะ 💔");
-  }
+		if (!voiceChannels.size) {
+			return interaction.reply("❌ ไม่มีห้องเสียงในเซิฟนี้นะค้าบ");
+		}
 
-  const song = serverQueue.songs[0];
+		const menu = new StringSelectMenuBuilder()
+			.setCustomId("vc_select")
+			.setPlaceholder("เลือกห้องเสียงที่ต้องการ")
+			.addOptions(
+				voiceChannels.map(vc => ({
+					label: vc.name,
+					value: vc.id
+				}))
+			);
 
-  return new EmbedBuilder()
-    .setColor("#ff66cc")
-    .setTitle("🎵 Music Panel By Pai 💖")
-    .setThumbnail(song.thumbnail)
-    .setDescription(
-`🎶 **กำลังเล่นอยู่**
-> ${song.title}
+		const row = new ActionRowBuilder().addComponents(menu);
 
-⏱️ เวลา: ${formatTime(song.duration)}
+		await interaction.reply({
+			content: "🎧 เลือกห้องเสียงที่บอทจะเข้าเลยค้าบ",
+			components: [row],
+			ephemeral: true
+		});
+	}
 
-📃 คิวทั้งหมด: ${serverQueue.songs.length} เพลง
+	// ================= /serverinfo =================
 
-💗 ฟังเพลินๆนะคะซีม่อน 😘`
-    );
-}
+	if (interaction.commandName === "serverinfo") {
 
-// ===============================
-// PLAY SONG
-// ===============================
+		await interaction.guild.members.fetch();
 
-async function playSong(guild, song) {
+		const members = interaction.guild.members.cache;
 
-  const serverQueue = queue.get(guild.id);
+		const humans = members.filter(m => !m.user.bot);
+		const bots = members.filter(m => m.user.bot);
 
-  if (!song) {
+		let list = "";
 
-    serverQueue.connection.destroy();
-    queue.delete(guild.id);
-    return;
-  }
+		members.forEach(m => {
+			list += `👤 ${m.user.tag} | 📅 ${m.joinedAt.toLocaleString("th-TH")}\n`;
+		});
 
-  const stream = ytdl(song.url, {
-    filter: "audioonly",
-    quality: "highestaudio",
-    highWaterMark: 1 << 25
-  });
+		const embed = new EmbedBuilder()
+			.setColor(0xffc0cb)
+			.setTitle("📊 ข้อมูลเซิฟเวอร์")
+			.setDescription(
+				`👥 สมาชิก: ${humans.size}\n` +
+				`🤖 บอท: ${bots.size}\n\n` +
+				`📌 รายชื่อทั้งหมด:\n${list}`
+			)
+			.setFooter({ text: "Angel Bot 24/7 🪽" })
+			.setTimestamp();
 
-  const resource = createAudioResource(stream);
+		await interaction.reply({ embeds: [embed] });
+	}
 
-  player.play(resource);
-  serverQueue.connection.subscribe(player);
+	// ================= /autogreet =================
 
-  player.once(AudioPlayerStatus.Idle, () => {
+	if (interaction.commandName === "autogreet") {
 
-    serverQueue.songs.shift();
-    playSong(guild, serverQueue.songs[0]);
-  });
-}
+		const channel = interaction.options.getChannel("channel");
 
-// ===============================
-// INTERACTION
-// ===============================
+		if (!channel.isTextBased()) {
+			return interaction.reply("❌ ต้องเป็นช่องข้อความเท่านั้นนะค้าบ");
+		}
 
-client.on(Events.InteractionCreate, async (interaction) => {
+		autoGreetChannel = channel.id;
 
-  // SLASH
-  if (interaction.isChatInputCommand()) {
-
-    if (interaction.commandName === "musicpanel") {
-
-      if (interaction.user.id !== OWNER_ID) {
-
-        return interaction.reply({
-          content: "❌ คำสั่งนี้สำหรับซีม่อนเท่านั้นนะคะ 💖",
-          flags: 64
-        });
-      }
-
-      const row = new ActionRowBuilder().addComponents(
-
-        new ButtonBuilder()
-          .setCustomId("add")
-          .setLabel("➕ เพิ่มเพลง")
-          .setStyle(ButtonStyle.Success),
-
-        new ButtonBuilder()
-          .setCustomId("pause")
-          .setLabel("⏸️ พัก")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("resume")
-          .setLabel("▶️ เล่น")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("skip")
-          .setLabel("⏭️ ข้าม")
-          .setStyle(ButtonStyle.Danger)
-      );
-
-      const embed = createPanel(interaction.guild.id);
-
-      await interaction.reply({
-        embeds: [embed],
-        components: [row]
-      });
-    }
-  }
-
-  // BUTTON
-  if (interaction.isButton()) {
-
-    const guild = interaction.guild;
-    const serverQueue = queue.get(guild.id);
-
-    if (interaction.customId === "pause") {
-
-      player.pause();
-
-      return interaction.reply({
-        content: "⏸️ พักเพลงแล้วค่ะ 💕",
-        flags: 64
-      });
-    }
-
-    if (interaction.customId === "resume") {
-
-      player.unpause();
-
-      return interaction.reply({
-        content: "▶️ เล่นต่อแล้วค่ะ 💖",
-        flags: 64
-      });
-    }
-
-    if (interaction.customId === "skip") {
-
-      if (!serverQueue) return;
-
-      serverQueue.songs.shift();
-      playSong(guild, serverQueue.songs[0]);
-
-      return interaction.reply({
-        content: "⏭️ ข้ามเพลงแล้วค่ะ 😘",
-        flags: 64
-      });
-    }
-
-    if (interaction.customId === "add") {
-
-      const modal = new ModalBuilder()
-        .setCustomId("addSong")
-        .setTitle("🎵 เพิ่มเพลง");
-
-      const input = new TextInputBuilder()
-        .setCustomId("url")
-        .setLabel("ใส่ลิงก์ YouTube เท่านั้น")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(input)
-      );
-
-      return interaction.showModal(modal);
-    }
-  }
-
-  // MODAL
-  if (interaction.type === InteractionType.ModalSubmit) {
-
-    if (interaction.customId === "addSong") {
-
-      const url = interaction.fields.getTextInputValue("url");
-
-      if (!ytdl.validateURL(url)) {
-
-        return interaction.reply({
-          content: "❌ ลิงก์ไม่ถูกต้องนะคะ 💔",
-          flags: 64
-        });
-      }
-
-      const voice = interaction.member.voice.channel;
-
-      if (!voice) {
-
-        return interaction.reply({
-          content: "❌ เข้า Voice ก่อนนะคะ 🎧",
-          flags: 64
-        });
-      }
-
-      const info = await ytdl.getInfo(url);
-
-      const song = {
-        title: info.videoDetails.title,
-        url: info.videoDetails.video_url,
-        duration: info.videoDetails.lengthSeconds,
-        thumbnail: info.videoDetails.thumbnails[0].url
-      };
-
-      let serverQueue = queue.get(interaction.guild.id);
-
-      if (!serverQueue) {
-
-        const data = {
-          connection: null,
-          songs: []
-        };
-
-        queue.set(interaction.guild.id, data);
-
-        data.songs.push(song);
-
-        const connection = joinVoiceChannel({
-          channelId: voice.id,
-          guildId: interaction.guild.id,
-          adapterCreator: interaction.guild.voiceAdapterCreator
-        });
-
-        data.connection = connection;
-
-        playSong(interaction.guild, data.songs[0]);
-
-      } else {
-
-        serverQueue.songs.push(song);
-      }
-
-      await interaction.reply({
-        content: "✅ เพิ่มเพลงเข้าคิวแล้วค่ะ 💕🎶",
-        flags: 64
-      });
-    }
-  }
+		await interaction.reply(`✅ ตั้งค่าทักทายอัตโนมัติที่ <#${channel.id}> แล้วค้าบ 💖`);
+	}
 });
 
-// ===============================
-// LOGIN
-// ===============================
+// ================= VC SELECT =================
 
-client.login(process.env.TOKEN);
+client.on("interactionCreate", async (interaction) => {
+
+	if (!interaction.isStringSelectMenu()) return;
+
+	if (interaction.customId !== "vc_select") return;
+
+	const channelId = interaction.values[0];
+
+	const channel = interaction.guild.channels.cache.get(channelId);
+
+	if (!channel) {
+		return interaction.reply("❌ ไม่พบห้องเสียง");
+	}
+
+	try {
+
+		stayChannel = channel;
+
+		stayConnection = joinVoiceChannel({
+			channelId: channel.id,
+			guildId: channel.guild.id,
+			adapterCreator: channel.guild.voiceAdapterCreator,
+			selfDeaf: false,
+		});
+
+		await entersState(stayConnection, VoiceConnectionStatus.Ready, 30000);
+
+		// Auto Reconnect
+		stayConnection.on(VoiceConnectionStatus.Disconnected, async () => {
+			try {
+				stayConnection.destroy();
+
+				stayConnection = joinVoiceChannel({
+					channelId: stayChannel.id,
+					guildId: stayChannel.guild.id,
+					adapterCreator: stayChannel.guild.voiceAdapterCreator,
+				});
+
+			} catch (e) {
+				console.log("Reconnect Failed:", e);
+			}
+		});
+
+		await interaction.update({
+			content: `✅ บอทเข้า **${channel.name}** แล้วค้าบ 🪽`,
+			components: []
+		});
+
+	} catch (e) {
+
+		console.log(e);
+
+		await interaction.update({
+			content: "❌ เข้า VC ไม่สำเร็จนะค้าบ",
+			components: []
+		});
+	}
+});
+
+// ================= AUTO GREET =================
+
+function sendEmbed(title, msg) {
+
+	if (!autoGreetChannel) return;
+
+	const channel = client.channels.cache.get(autoGreetChannel);
+
+	if (!channel) return;
+
+	const embed = new EmbedBuilder()
+		.setColor(0xffb6c1)
+		.setTitle(title)
+		.setDescription(msg)
+		.setFooter({ text: "Angel Bot 24/7 🪽" })
+		.setTimestamp();
+
+	channel.send({
+		content: "@everyone @here",
+		embeds: [embed]
+	});
+}
+
+// 06:00
+cron.schedule("0 6 * * *", () => {
+	sendEmbed("🌤️ สวัสดีตอนเช้า",
+		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n🌞 ตื่นได้แล้วนะ\n🛁 อาบน้ำ กินข้าว\n📚 ไปเรียน ไปทำงาน\n✨ สู้ๆนะค้าบ 💕"
+	);
+});
+
+// 12:00
+cron.schedule("0 12 * * *", () => {
+	sendEmbed("🍽️ เที่ยงแล้ว",
+		"🍛 อย่าลืมกินข้าวนะค้าบ\n🥤 ดื่มน้ำเยอะๆ\n🫶 ดูแลตัวเองด้วยน้า"
+	);
+});
+
+// 17:00
+cron.schedule("0 17 * * *", () => {
+	sendEmbed("🌇 ตอนเย็นแล้ว",
+		"😴 เหนื่อยกันมาทั้งวัน\n🍜 ไปหาอะไรกิน\n💖 เก่งมากทุกคน"
+	);
+});
+
+// 22:00
+cron.schedule("0 22 * * *", () => {
+	sendEmbed("🌙 Good Night",
+		"📱 วางมือถือบ้างน้า\n🛏️ ไปนอนได้แล้ว\n💫 ฝันดีค้าบ"
+	);
+});
+
+// 00:00
+cron.schedule("0 0 * * *", () => {
+	sendEmbed("🎊 วันใหม่แล้ว",
+		"🌈 เริ่มต้นใหม่อีกวัน\n🚀 ขอให้ปังๆ\n🪽 Angel อยู่ข้างๆเสมอ"
+	);
+});
+
+// ================= LOGIN =================
+
+client.login(TOKEN);
