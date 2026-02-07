@@ -18,6 +18,7 @@ const {
 	joinVoiceChannel,
 	entersState,
 	VoiceConnectionStatus,
+	getVoiceConnection,
 } = require("@discordjs/voice");
 
 const cron = require("node-cron");
@@ -82,7 +83,7 @@ function isOwner(interaction) {
 	return interaction.user.id === OWNER_ID;
 }
 
-// ================= HEART REACT =================
+// ================= HEART =================
 
 const hearts = ["💖", "💗", "💙", "💛", "💜", "💚"];
 
@@ -168,7 +169,6 @@ client.on("interactionCreate", async (interaction) => {
 			ephemeral: true
 		});
 
-		// ลบใน 10 วิ
 		setTimeout(() => {
 			interaction.deleteReply().catch(() => {});
 		}, 10000);
@@ -195,7 +195,6 @@ client.on("interactionCreate", async (interaction) => {
 client.on("interactionCreate", async (interaction) => {
 
 	if (!interaction.isStringSelectMenu()) return;
-
 	if (interaction.customId !== "vc_select") return;
 
 	if (interaction.user.id !== OWNER_ID) {
@@ -206,7 +205,6 @@ client.on("interactionCreate", async (interaction) => {
 	}
 
 	const channelId = interaction.values[0];
-
 	const channel = interaction.guild.channels.cache.get(channelId);
 
 	if (!channel) {
@@ -217,15 +215,24 @@ client.on("interactionCreate", async (interaction) => {
 
 		stayChannel = channel;
 
+		// ปิดของเก่า
+		const old = getVoiceConnection(channel.guild.id);
+		if (old) old.destroy();
+
 		stayConnection = joinVoiceChannel({
 			channelId: channel.id,
 			guildId: channel.guild.id,
 			adapterCreator: channel.guild.voiceAdapterCreator,
-			selfDeaf: false,
+
+			selfDeaf: true, // ปิดหูฟัง
+			selfMute: true, // ปิดไมค์
+
+			group: "angel24",
 		});
 
 		await entersState(stayConnection, VoiceConnectionStatus.Ready, 30000);
 
+		// Auto Reconnect
 		stayConnection.on(VoiceConnectionStatus.Disconnected, async () => {
 
 			try {
@@ -236,24 +243,29 @@ client.on("interactionCreate", async (interaction) => {
 					channelId: stayChannel.id,
 					guildId: stayChannel.guild.id,
 					adapterCreator: stayChannel.guild.voiceAdapterCreator,
+
+					selfDeaf: true,
+					selfMute: true,
+
+					group: "angel24",
 				});
 
 			} catch (e) {
-				console.log("Reconnect Failed:", e);
+				console.log("Reconnect Error:", e);
 			}
 		});
 
 		await interaction.update({
-			content: `✅ เข้า **${channel.name}** แล้วค้าบ 🪽`,
+			content: `✅ เข้า **${channel.name}** ค้างไว้แล้วค้าบ 🪽💖`,
 			components: []
 		});
 
 	} catch (e) {
 
-		console.log(e);
+		console.log("VC ERROR:", e);
 
 		await interaction.update({
-			content: "❌ เข้า VC ไม่สำเร็จนะค้าบ",
+			content: "❌ เข้า VC ไม่สำเร็จนะค้าบ (กำลังแก้ไขให้อัตโนมัติ)",
 			components: []
 		});
 	}
@@ -266,7 +278,6 @@ async function sendEmbed(title, msg, color) {
 	if (!autoGreetChannel) return;
 
 	const channel = client.channels.cache.get(autoGreetChannel);
-
 	if (!channel) return;
 
 	const embed = new EmbedBuilder()
@@ -281,74 +292,47 @@ async function sendEmbed(title, msg, color) {
 		embeds: [embed]
 	});
 
-	// ใส่หัวใจอัตโนมัติ
 	await message.react(randomHeart());
 }
 
-// ================= CRON MESSAGE =================
+// ================= CRON =================
 
 // 06:00
 cron.schedule("0 6 * * *", () => {
-	sendEmbed(
-		"🌤️ สวัสดีตอนเช้า",
-		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n\n" +
-		"🌞 เช้าแล้วนะ ตื่นได้แล้ววว\n" +
-		"🛁 อาบน้ำ แปรงฟัน ล้างหน้า\n" +
-		"🍳 กินข้าวให้อิ่มๆ\n" +
-		"📚 ไปเรียน / ไปทำงาน / ไปเล่น\n\n" +
-		"✨ ขอให้วันนี้สดใสทั้งวันนะค้าบ 💕",
+	sendEmbed("🌤️ สวัสดีตอนเช้า",
+		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n\n🌞 เช้าแล้วนะ ตื่นได้แล้ววว\n🛁 อาบน้ำ แปรงฟัน ล้างหน้า\n🍳 กินข้าวให้อิ่มๆ\n📚 ไปเรียน / ไปทำงาน / ไปเล่น\n\n✨ ขอให้วันนี้สดใสทั้งวันนะค้าบ 💕",
 		0xffc1dc
 	);
 });
 
 // 12:00
 cron.schedule("0 12 * * *", () => {
-	sendEmbed(
-		"🍽️ เที่ยงแล้ว",
-		"💗 เที่ยงแล้วน้าา~\n\n" +
-		"🍛 อย่าลืมกินข้าวนะค้าบ\n" +
-		"🥤 ดื่มน้ำเยอะๆด้วย\n" +
-		"🧠 พักสายตาบ้าง\n\n" +
-		"✨ ดูแลตัวเองดีๆนะค้าบ 🫶",
+	sendEmbed("🍽️ เที่ยงแล้ว",
+		"💗 เที่ยงแล้วน้าา~\n\n🍛 อย่าลืมกินข้าวนะค้าบ\n🥤 ดื่มน้ำเยอะๆด้วย\n🧠 พักสายตาบ้าง\n\n✨ ดูแลตัวเองดีๆนะค้าบ 🫶",
 		0xffe066
 	);
 });
 
 // 17:00
 cron.schedule("0 17 * * *", () => {
-	sendEmbed(
-		"🌇 ตอนเย็นแล้ว",
-		"💕 เย็นแล้ววว~\n\n" +
-		"😴 เหนื่อยมาทั้งวันเลยใช่ม้า\n" +
-		"🍜 ไปหาอะไรกินอร่อยๆ\n" +
-		"🏠 กลับบ้านปลอดภัยนะ\n\n" +
-		"✨ เก่งมากทุกคนเลย 💖",
+	sendEmbed("🌇 ตอนเย็นแล้ว",
+		"💕 เย็นแล้ววว~\n\n😴 เหนื่อยมาทั้งวันเลยใช่ม้า\n🍜 ไปหาอะไรกินอร่อยๆ\n🏠 กลับบ้านปลอดภัยนะ\n\n✨ เก่งมากทุกคนเลย 💖",
 		0xa29bfe
 	);
 });
 
 // 22:00
 cron.schedule("0 22 * * *", () => {
-	sendEmbed(
-		"🌙 Good Night",
-		"💫 ดึกแล้วนะค้าบ~\n\n" +
-		"📱 วางมือถือบ้างน้า\n" +
-		"🛏️ ไปนอนได้แล้ว\n" +
-		"😴 พักผ่อนให้พอ\n\n" +
-		"✨ ฝันดีนะค้าบทุกคน 💖",
+	sendEmbed("🌙 Good Night",
+		"💫 ดึกแล้วนะค้าบ~\n\n📱 วางมือถือบ้างน้า\n🛏️ ไปนอนได้แล้ว\n😴 พักผ่อนให้พอ\n\n✨ ฝันดีนะค้าบทุกคน 💖",
 		0x74b9ff
 	);
 });
 
 // 00:00
 cron.schedule("0 0 * * *", () => {
-	sendEmbed(
-		"🎊 วันใหม่แล้ว",
-		"💖 ติ๊งงง~ วันใหม่มาแล้วว\n\n" +
-		"🌈 เริ่มต้นใหม่อีกวัน\n" +
-		"🚀 ขอให้ปังกว่าเดิม\n" +
-		"🪽 Angel อยู่ข้างๆเสมอ\n\n" +
-		"✨ สู้ๆนะค้าบ 💕",
+	sendEmbed("🎊 วันใหม่แล้ว",
+		"💖 ติ๊งงง~ วันใหม่มาแล้วว\n\n🌈 เริ่มต้นใหม่อีกวัน\n🚀 ขอให้ปังกว่าเดิม\n🪽 Angel อยู่ข้างๆเสมอ\n\n✨ สู้ๆนะค้าบ 💕",
 		0x55efc4
 	);
 });
