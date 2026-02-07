@@ -16,9 +16,9 @@ const {
 
 const {
 	joinVoiceChannel,
-	entersState,
-	VoiceConnectionStatus,
 	getVoiceConnection,
+	VoiceConnectionStatus,
+	entersState,
 } = require("@discordjs/voice");
 
 const cron = require("node-cron");
@@ -30,7 +30,8 @@ const OWNER_ID = process.env.OWNER_ID;
 
 const DATA_FILE = "./data.json";
 
-const IMAGE_URL = "https://cdn.discordapp.com/attachments/1469708771440857211/1469724465922310399/IMG_0154.png";
+const IMAGE_URL =
+	"https://cdn.discordapp.com/attachments/1469708771440857211/1469724465922310399/IMG_0154.png";
 
 // ================= DATA =================
 
@@ -64,11 +65,9 @@ const client = new Client({
 // ================= READY =================
 
 client.once("ready", async () => {
-
 	console.log(`✅ Logged in as ${client.user.tag}`);
 
 	const commands = [
-
 		new SlashCommandBuilder()
 			.setName("stayvc")
 			.setDescription("ให้บอทเข้า VC ค้าง 24/7"),
@@ -80,8 +79,9 @@ client.once("ready", async () => {
 		new SlashCommandBuilder()
 			.setName("autogreet")
 			.setDescription("ตั้งค่าช่องทักทาย")
-			.addChannelOption(opt =>
-				opt.setName("channel")
+			.addChannelOption((opt) =>
+				opt
+					.setName("channel")
 					.setRequired(true)
 					.setDescription("เลือกช่อง")
 			),
@@ -89,12 +89,19 @@ client.once("ready", async () => {
 		new SlashCommandBuilder()
 			.setName("setnotify")
 			.setDescription("ตั้งค่าระบบแจ้งเตือน")
-			.addChannelOption(o => o.setName("create").setDescription("แจ้งเตือนสร้าง").setRequired(true))
-			.addChannelOption(o => o.setName("delete").setDescription("แจ้งเตือนลบ").setRequired(true))
-			.addChannelOption(o => o.setName("join").setDescription("เข้า VC").setRequired(true))
-			.addChannelOption(o => o.setName("leave").setDescription("ออก VC").setRequired(true))
-
-	].map(c => c.toJSON());
+			.addChannelOption((o) =>
+				o.setName("create").setDescription("แจ้งเตือนสร้าง").setRequired(true)
+			)
+			.addChannelOption((o) =>
+				o.setName("delete").setDescription("แจ้งเตือนลบ").setRequired(true)
+			)
+			.addChannelOption((o) =>
+				o.setName("join").setDescription("เข้า VC").setRequired(true)
+			)
+			.addChannelOption((o) =>
+				o.setName("leave").setDescription("ออก VC").setRequired(true)
+			),
+	].map((c) => c.toJSON());
 
 	await client.application.commands.set(commands);
 
@@ -118,64 +125,149 @@ function randomHeart() {
 // ================= INTERACTION =================
 
 client.on("interactionCreate", async (i) => {
+	// ================= SLASH =================
 
-	if (!i.isChatInputCommand()) return;
+	if (i.isChatInputCommand()) {
+		if (!isOwner(i)) {
+			return i.reply({
+				content: "❌ เฉพาะซีม่อนเท่านั้นนะค้าบ",
+				ephemeral: true,
+			});
+		}
 
-	if (!isOwner(i)) {
-		return i.reply({ content: "❌ เฉพาะซีม่อนเท่านั้นนะค้าบ", ephemeral: true });
+		// ================= stayvc =================
+
+		if (i.commandName === "stayvc") {
+			const vcs = i.guild.channels.cache.filter(
+				(c) => c.type === ChannelType.GuildVoice
+			);
+
+			if (!vcs.size) {
+				return i.reply({
+					content: "❌ ไม่มีห้องเสียงในเซิฟนี้ค้าบ",
+					ephemeral: true,
+				});
+			}
+
+			const menu = new StringSelectMenuBuilder()
+				.setCustomId("vc_select")
+				.setPlaceholder("🎧 เลือกห้อง")
+				.addOptions(
+					vcs.map((v) => ({
+						label: v.name,
+						value: v.id,
+					}))
+				);
+
+			await i.reply({
+				components: [new ActionRowBuilder().addComponents(menu)],
+				ephemeral: true,
+			});
+		}
+
+		// ================= serverinfo =================
+
+		if (i.commandName === "serverinfo") {
+			const g = i.guild;
+
+			const embed = new EmbedBuilder()
+				.setColor(0xffc1dc)
+				.setTitle("📊 ข้อมูลเซิฟเวอร์")
+				.setThumbnail(g.iconURL({ dynamic: true }))
+				.setDescription(
+					`🏷️ ชื่อ: ${g.name}\n` +
+						`🆔 ID: ${g.id}\n` +
+						`👑 เจ้าของ: <@${g.ownerId}>\n` +
+						`👥 สมาชิก: ${g.memberCount}\n` +
+						`📁 หมวดหมู่: ${g.channels.cache.filter(
+							(c) => c.type === ChannelType.GuildCategory
+						).size}\n` +
+						`💬 ห้องแชท: ${g.channels.cache.filter(
+							(c) => c.type === ChannelType.GuildText
+						).size}\n` +
+						`🎧 ห้องเสียง: ${g.channels.cache.filter(
+							(c) => c.type === ChannelType.GuildVoice
+						).size}\n\n` +
+						`📅 สร้างเมื่อ: ${g.createdAt.toLocaleString("th-TH")}`
+				)
+				.setTimestamp();
+
+			await i.reply({ embeds: [embed] });
+		}
+
+		// ================= autogreet =================
+
+		if (i.commandName === "autogreet") {
+			const ch = i.options.getChannel("channel");
+
+			data.autoGreet = ch.id;
+			saveData();
+
+			await i.reply(`✅ ตั้งค่าทักทายที่ <#${ch.id}> แล้วค้าบ 💖`);
+		}
+
+		// ================= setnotify =================
+
+		if (i.commandName === "setnotify") {
+			data.createLog = i.options.getChannel("create").id;
+			data.deleteLog = i.options.getChannel("delete").id;
+			data.vcJoin = i.options.getChannel("join").id;
+			data.vcLeave = i.options.getChannel("leave").id;
+
+			saveData();
+
+			await i.reply("✅ ตั้งค่าระบบแจ้งเตือนเรียบร้อยแล้วค้าบ 💖");
+		}
 	}
 
-	// ================= stayvc =================
+	// ================= SELECT MENU =================
 
-	if (i.commandName === "stayvc") {
+	if (i.isStringSelectMenu()) {
+		if (i.customId === "vc_select") {
+			const vcId = i.values[0];
+			const vc = i.guild.channels.cache.get(vcId);
 
-		const vcs = i.guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice);
+			if (!vc) {
+				return i.reply({
+					content: "❌ ไม่พบห้องเสียง",
+					ephemeral: true,
+				});
+			}
 
-		const menu = new StringSelectMenuBuilder()
-			.setCustomId("vc_select")
-			.setPlaceholder("🎧 เลือกห้อง")
-			.addOptions(vcs.map(v => ({
-				label: v.name,
-				value: v.id
-			})));
+			let conn = getVoiceConnection(i.guild.id);
 
-		await i.reply({
-			components: [new ActionRowBuilder().addComponents(menu)],
-			ephemeral: true
-		});
-	}
+			if (conn) conn.destroy();
 
-	// ================= autogreet =================
+			conn = joinVoiceChannel({
+				channelId: vc.id,
+				guildId: i.guild.id,
+				adapterCreator: i.guild.voiceAdapterCreator,
+				selfDeaf: false,
+				selfMute: false,
+			});
 
-	if (i.commandName === "autogreet") {
+			try {
+				await entersState(conn, VoiceConnectionStatus.Ready, 15000);
 
-		const ch = i.options.getChannel("channel");
+				await i.reply({
+					content: `✅ เข้า VC: **${vc.name}** แล้วค้าบ 💖`,
+					ephemeral: true,
+				});
+			} catch (e) {
+				conn.destroy();
 
-		data.autoGreet = ch.id;
-		saveData();
-
-		await i.reply(`✅ ตั้งค่าทักทายที่ <#${ch.id}> แล้วค้าบ 💖`);
-	}
-
-	// ================= setnotify =================
-
-	if (i.commandName === "setnotify") {
-
-		data.createLog = i.options.getChannel("create").id;
-		data.deleteLog = i.options.getChannel("delete").id;
-		data.vcJoin = i.options.getChannel("join").id;
-		data.vcLeave = i.options.getChannel("leave").id;
-
-		saveData();
-
-		await i.reply("✅ ตั้งค่าระบบแจ้งเตือนเรียบร้อยแล้วค้าบ 💖");
+				await i.reply({
+					content: "❌ เข้า VC ไม่สำเร็จค้าบ",
+					ephemeral: true,
+				});
+			}
+		}
 	}
 });
 
 // ================= LOG SEND =================
 
 function sendLog(channelId, embed) {
-
 	if (!channelId) return;
 
 	const ch = client.channels.cache.get(channelId);
@@ -187,14 +279,12 @@ function sendLog(channelId, embed) {
 // ================= CHANNEL CREATE =================
 
 client.on("channelCreate", async (ch) => {
-
 	let executor = "ไม่ทราบผู้ใช้";
 
 	try {
-
 		const logs = await ch.guild.fetchAuditLogs({
-			type: 10, // CHANNEL_CREATE
-			limit: 1
+			type: 10,
+			limit: 1,
 		});
 
 		const entry = logs.entries.first();
@@ -202,19 +292,18 @@ client.on("channelCreate", async (ch) => {
 		if (entry?.executor) {
 			executor = `<@${entry.executor.id}>`;
 		}
-
-	} catch (e) {
-		console.log("Create Log Error:", e);
-	}
+	} catch {}
 
 	const embed = new EmbedBuilder()
 		.setColor(0x55efc4)
 		.setTitle("📁 สร้างห้องใหม่")
 		.setDescription(
 			`👤 ${executor}\n` +
-			`📂 ${ch.parent ? ch.parent.name : "ไม่มีหมวด"}\n` +
-			`#️⃣ <#${ch.id}>\n\n` +
-			`📅 ${new Date().toLocaleString("th-TH")}`
+				`📂 ในหมวดหมู่ : ${
+					ch.parent ? ch.parent.name : "ไม่มีหมวด"
+				}\n` +
+				`#️⃣ ชื่อห้อง : ${ch.name}\n\n` +
+				`📅 ${new Date().toLocaleString("th-TH")}`
 		)
 		.setTimestamp();
 
@@ -224,14 +313,12 @@ client.on("channelCreate", async (ch) => {
 // ================= CHANNEL DELETE =================
 
 client.on("channelDelete", async (ch) => {
-
 	let executor = "ไม่ทราบผู้ใช้";
 
 	try {
-
 		const logs = await ch.guild.fetchAuditLogs({
-			type: 12, // CHANNEL_DELETE
-			limit: 1
+			type: 12,
+			limit: 1,
 		});
 
 		const entry = logs.entries.first();
@@ -239,19 +326,18 @@ client.on("channelDelete", async (ch) => {
 		if (entry?.executor) {
 			executor = `<@${entry.executor.id}>`;
 		}
-
-	} catch (e) {
-		console.log("Delete Log Error:", e);
-	}
+	} catch {}
 
 	const embed = new EmbedBuilder()
 		.setColor(0xff7675)
 		.setTitle("🗑️ ลบห้อง")
 		.setDescription(
 			`👤 ${executor}\n` +
-			`📂 ${ch.parent ? ch.parent.name : "ไม่มีหมวด"}\n` +
-			`#️⃣ ${ch.name}\n\n` +
-			`📅 ${new Date().toLocaleString("th-TH")}`
+				`📂 ในหมวดหมู่ : ${
+					ch.parent ? ch.parent.name : "ไม่มีหมวด"
+				}\n` +
+				`#️⃣ ชื่อห้อง : ${ch.name}\n\n` +
+				`📅 ${new Date().toLocaleString("th-TH")}`
 		)
 		.setTimestamp();
 
@@ -261,32 +347,29 @@ client.on("channelDelete", async (ch) => {
 // ================= VOICE =================
 
 client.on("voiceStateUpdate", (oldS, newS) => {
-
 	const user = newS.member || oldS.member;
 
 	if (!oldS.channel && newS.channel) {
-
 		const embed = new EmbedBuilder()
 			.setColor(0x74b9ff)
 			.setTitle("🎧 เข้า VC")
 			.setDescription(
 				`👤 ${user}\n` +
-				`🔊 <#${newS.channel.id}>\n\n` +
-				`📅 ${new Date().toLocaleString("th-TH")}`
+					`🔊 <#${newS.channel.id}>\n\n` +
+					`📅 ${new Date().toLocaleString("th-TH")}`
 			);
 
 		sendLog(data.vcJoin, embed);
 	}
 
 	if (oldS.channel && !newS.channel) {
-
 		const embed = new EmbedBuilder()
 			.setColor(0xa29bfe)
 			.setTitle("🚪 ออก VC")
 			.setDescription(
 				`👤 ${user}\n` +
-				`🔊 <#${oldS.channel.id}>\n\n` +
-				`📅 ${new Date().toLocaleString("th-TH")}`
+					`🔊 <#${oldS.channel.id}>\n\n` +
+					`📅 ${new Date().toLocaleString("th-TH")}`
 			);
 
 		sendLog(data.vcLeave, embed);
@@ -296,7 +379,6 @@ client.on("voiceStateUpdate", (oldS, newS) => {
 // ================= AUTO GREET =================
 
 async function sendEmbed(title, msg, color) {
-
 	if (!data.autoGreet) return;
 
 	const ch = client.channels.cache.get(data.autoGreet);
@@ -312,7 +394,7 @@ async function sendEmbed(title, msg, color) {
 
 	const m = await ch.send({
 		content: "@everyone @here",
-		embeds: [embed]
+		embeds: [embed],
 	});
 
 	await m.react(randomHeart());
@@ -321,35 +403,40 @@ async function sendEmbed(title, msg, color) {
 // ================= CRON =================
 
 cron.schedule("0 6 * * *", () => {
-	sendEmbed("🌤️ สวัสดีตอนเช้า",
+	sendEmbed(
+		"🌤️ สวัสดีตอนเช้า",
 		"💖 อรุณสวัสดิ์ค้าบทุกคนน~\n\n🌞 เช้าแล้วนะ ตื่นได้แล้ววว\n🛁 อาบน้ำ แปรงฟัน ล้างหน้า\n🍳 กินข้าวให้อิ่มๆ\n📚 ไปเรียน / ไปทำงาน / ไปเล่น\n\n✨ ขอให้วันนี้สดใสทั้งวันนะค้าบ 💕",
 		0xffc1dc
 	);
 });
 
 cron.schedule("0 12 * * *", () => {
-	sendEmbed("🍽️ เที่ยงแล้ว",
+	sendEmbed(
+		"🍽️ เที่ยงแล้ว",
 		"💗 เที่ยงแล้วน้าา~\n\n🍛 อย่าลืมกินข้าวนะค้าบ\n🥤 ดื่มน้ำเยอะๆด้วย\n🧠 พักสายตาบ้าง\n\n✨ ดูแลตัวเองดีๆนะค้าบ 🫶",
 		0xffe066
 	);
 });
 
 cron.schedule("0 17 * * *", () => {
-	sendEmbed("🌇 ตอนเย็นแล้ว",
+	sendEmbed(
+		"🌇 ตอนเย็นแล้ว",
 		"💕 เย็นแล้ววว~\n\n😴 เหนื่อยมาทั้งวันเลยใช่ม้า\n🍜 ไปหาอะไรกินอร่อยๆ\n🏠 กลับบ้านปลอดภัยนะ\n\n✨ เก่งมากทุกคนเลย 💖",
 		0xa29bfe
 	);
 });
 
 cron.schedule("0 22 * * *", () => {
-	sendEmbed("🌙 Good Night",
+	sendEmbed(
+		"🌙 Good Night",
 		"💫 ดึกแล้วนะค้าบ~\n\n📱 วางมือถือบ้างน้า\n🛏️ ไปนอนได้แล้ว\n😴 พักผ่อนให้พอ\n\n✨ ฝันดีนะค้าบทุกคน 💖",
 		0x74b9ff
 	);
 });
 
 cron.schedule("0 0 * * *", () => {
-	sendEmbed("🎊 วันใหม่แล้ว",
+	sendEmbed(
+		"🎊 วันใหม่แล้ว",
 		"💖 ติ๊งงง~ วันใหม่มาแล้วว\n\n🌈 เริ่มต้นใหม่อีกวัน\n🚀 ขอให้ปังกว่าเดิม\n🪽 Angel อยู่ข้างๆเสมอ\n\n✨ สู้ๆนะค้าบ 💕",
 		0x55efc4
 	);
